@@ -112,8 +112,8 @@ class DashboardPeminjamContent extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: supabase
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: supabase
                   .from('peminjaman')
                   .select('''
                     id,
@@ -129,16 +129,25 @@ class DashboardPeminjamContent extends StatelessWidget {
                     )
                   ''')
                   .eq('user_id', user.id)
-                  .order('id', ascending: false)
-                  .asStream(),
+                  .order('id', ascending: false),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   );
                 }
 
-                final data = snapshot.data!;
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      snapshot.error.toString(),
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  );
+                }
+
+                final data = snapshot.data ?? [];
+
                 if (data.isEmpty) {
                   return const Center(
                     child: Text(
@@ -153,7 +162,10 @@ class DashboardPeminjamContent extends StatelessWidget {
                   itemBuilder: (context, i) {
                     final item = data[i];
                     final alat = item['alat'];
-                    if (alat == null) return const SizedBox();
+
+                    if (alat == null) {
+                      return const SizedBox();
+                    }
 
                     return AlatDashboardCard(
                       alat: alat,

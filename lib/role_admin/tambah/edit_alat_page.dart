@@ -85,6 +85,11 @@ class _EditAlatPageState extends State<EditAlatPage> {
         'gambar': imageUrl,
       }).eq('id', widget.alat['id']);
 
+      await supabase.from('log_aktivitas').insert({
+  'user_id': supabase.auth.currentUser!.id,
+  'log_aktivitas': 'Admin mengedit data alat: ${namaAlat.text}',
+});
+
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {

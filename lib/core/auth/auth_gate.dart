@@ -41,16 +41,15 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     try {
-      // ================= ADMIN =================
-      final admin = await supabase
+      final data = await supabase
           .from('users')
           .select('role')
           .eq('userid', user.id)
-          .maybeSingle();
+          .single();
 
-      if (admin != null &&
-          admin['role'] != null &&
-          admin['role'].toString().toLowerCase() == 'admin') {
+      final dbRole = data['role']?.toString().toLowerCase();
+
+      if (dbRole == 'admin') {
         setState(() {
           role = 'admin';
           loading = false;
@@ -58,14 +57,7 @@ class _AuthGateState extends State<AuthGate> {
         return;
       }
 
-      // ================= PETUGAS =================
-      final petugas = await supabase
-          .from('petugas')
-          .select('id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-      if (petugas != null) {
+      if (dbRole == 'petugas') {
         setState(() {
           role = 'petugas';
           loading = false;
@@ -73,9 +65,17 @@ class _AuthGateState extends State<AuthGate> {
         return;
       }
 
-      // ================= PEMINJAM =================
+      if (dbRole == 'peminjam') {
+        setState(() {
+          role = 'peminjam';
+          loading = false;
+        });
+        return;
+      }
+
+      // yen role ora dikenal
       setState(() {
-        role = 'peminjam';
+        role = null;
         loading = false;
       });
     } catch (e) {

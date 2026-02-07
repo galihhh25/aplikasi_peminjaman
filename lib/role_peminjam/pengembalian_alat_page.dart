@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PengembalianPage extends StatefulWidget {
   final int peminjamanId;
@@ -22,19 +23,21 @@ class PengembalianPage extends StatefulWidget {
 
 class _PengembalianPageState extends State<PengembalianPage> {
   final _formKey = GlobalKey<FormState>();
+  final supabase = Supabase.instance.client;
 
   final TextEditingController jumlahController = TextEditingController();
   final TextEditingController catatanController = TextEditingController();
 
   DateTime? tanggalPengembalian;
 
-  String kondisi = 'Baik';
   int hariTelat = 0;
   int dendaTelat = 0;
   int dendaKerusakan = 0;
   int totalDenda = 0;
 
   static const int dendaPerHari = 5000;
+
+  String kondisi = 'Baik';
 
   final Map<String, bool> kerusakan = {
     'Robek': false,
@@ -62,11 +65,28 @@ class _PengembalianPageState extends State<PengembalianPage> {
     super.initState();
     jumlahController.text = widget.jumlah.toString();
     tanggalPengembalian = DateTime.now();
-    _hitungDendaTelat();
-    _hitungTotalDenda();
+    _hitungSemua();
   }
 
-  /// ================= KERUSAKAN =================
+  // ================= HITUNG =================
+
+  void _hitungSemua() {
+    _hitungDendaTelat();
+    _hitungKondisi();
+    totalDenda = dendaTelat + dendaKerusakan;
+  }
+
+  void _hitungDendaTelat() {
+    if (tanggalPengembalian!.isAfter(widget.tanggalJatuhTempo)) {
+      hariTelat =
+          tanggalPengembalian!.difference(widget.tanggalJatuhTempo).inDays;
+      dendaTelat = hariTelat * dendaPerHari;
+    } else {
+      hariTelat = 0;
+      dendaTelat = 0;
+    }
+  }
+
   void _hitungKondisi() {
     final dipilih =
         kerusakan.entries.where((e) => e.value).map((e) => e.key).toList();
@@ -77,31 +97,16 @@ class _PengembalianPageState extends State<PengembalianPage> {
 
     if (dipilih.isEmpty) {
       kondisi = 'Baik';
+      dendaKerusakan = 0;
     } else if (adaBerat || dipilih.length >= 3) {
       kondisi = 'Rusak Berat';
+      dendaKerusakan = 50000;
     } else if (jumlahRingan == 2) {
       kondisi = 'Rusak Sedang';
+      dendaKerusakan = 25000;
     } else {
       kondisi = 'Rusak Ringan';
-    }
-
-    _hitungDendaKerusakan();
-    _hitungTotalDenda();
-  }
-
-  void _hitungDendaKerusakan() {
-    switch (kondisi) {
-      case 'Rusak Ringan':
-        dendaKerusakan = 10000;
-        break;
-      case 'Rusak Sedang':
-        dendaKerusakan = 25000;
-        break;
-      case 'Rusak Berat':
-        dendaKerusakan = 50000;
-        break;
-      default:
-        dendaKerusakan = 0;
+      dendaKerusakan = 10000;
     }
   }
 
@@ -118,40 +123,45 @@ class _PengembalianPageState extends State<PengembalianPage> {
     }
   }
 
-  /// ================= DENDA TELAT =================
-  void _hitungDendaTelat() {
-    if (tanggalPengembalian!.isAfter(widget.tanggalJatuhTempo)) {
-      hariTelat =
-          tanggalPengembalian!.difference(widget.tanggalJatuhTempo).inDays;
-      dendaTelat = hariTelat * dendaPerHari;
-    } else {
-      hariTelat = 0;
-      dendaTelat = 0;
+  // ================= DATABASE =================
+
+  Future<void> kembalikanAlat() async {
+    try {
+      // ambil stok alat
+      final alat = await supabase
+          .from('alat')
+          .select('stok')
+          .eq('id', widget.alatId)
+          .single();
+
+      final int stokSekarang = alat['stok'];
+
+      // update stok
+      await supabase.from('alat').update({
+        'stok': stokSekarang + widget.jumlah,
+      }).eq('id', widget.alatId);
+
+      // update status peminjaman
+      await supabase.from('peminjaman').update({
+        'status': 'dikembalikan',
+      }).eq('id', widget.peminjamanId);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pengembalian berhasil disimpan')),
+      );
+
+      Navigator.pop(context, true); // 🔥 refresh dashboard
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 
-  void _hitungTotalDenda() {
-    totalDenda = dendaTelat + dendaKerusakan;
-  }
+  // ================= UI =================
 
-  Future<void> _pilihTanggal(BuildContext context) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: tanggalPengembalian!,
-      firstDate: widget.tanggalJatuhTempo,
-      lastDate: DateTime.now().add(const Duration(days: 30)),
-    );
-
-    if (picked != null) {
-      setState(() {
-        tanggalPengembalian = picked;
-        _hitungDendaTelat();
-        _hitungTotalDenda();
-      });
-    }
-  }
-
-  /// ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -168,14 +178,14 @@ class _PengembalianPageState extends State<PengembalianPage> {
             children: [
               _label('Nama Alat'),
               Text(widget.namaAlat),
+
               _label('Jumlah Dikembalikan'),
               TextFormField(
                 controller: jumlahController,
                 readOnly: true,
-                decoration: _inputDecoration(
-                  hint: 'Jumlah otomatis',
-                ),
+                decoration: _input(),
               ),
+
               _label('Tanggal Pengembalian'),
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -183,9 +193,23 @@ class _PengembalianPageState extends State<PengembalianPage> {
                   '${tanggalPengembalian!.day}-${tanggalPengembalian!.month}-${tanggalPengembalian!.year}',
                 ),
                 trailing: const Icon(Icons.calendar_today),
-                onTap: () => _pilihTanggal(context),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: tanggalPengembalian!,
+                    firstDate: widget.tanggalJatuhTempo,
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      tanggalPengembalian = picked;
+                      _hitungSemua();
+                    });
+                  }
+                },
               ),
-              _label('Kondisi Otomatis'),
+
+              _label('Kondisi'),
               Text(
                 kondisi,
                 style: TextStyle(
@@ -193,39 +217,31 @@ class _PengembalianPageState extends State<PengembalianPage> {
                   color: _warnaKondisi(),
                 ),
               ),
-              const SizedBox(height: 12),
+
+              const SizedBox(height: 10),
               _label('Detail Kerusakan'),
-              Column(
-                children: kerusakan.keys.map((item) {
-                  return CheckboxListTile(
-                    title: Text(item),
-                    value: kerusakan[item],
-                    onChanged: (value) {
-                      setState(() {
-                        kerusakan[item] = value!;
-                        _hitungKondisi();
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-              _label('Rincian Denda'),
+              ...kerusakan.keys.map((k) {
+                return CheckboxListTile(
+                  title: Text(k),
+                  value: kerusakan[k],
+                  onChanged: (v) {
+                    setState(() {
+                      kerusakan[k] = v!;
+                      _hitungSemua();
+                    });
+                  },
+                );
+              }),
+
+              const Divider(),
               Text('Denda Telat : Rp $dendaTelat'),
               Text('Denda Kerusakan : Rp $dendaKerusakan'),
-              const Divider(),
               Text(
                 'Total Denda : Rp $totalDenda',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              _label('Catatan'),
-              TextFormField(
-                controller: catatanController,
-                maxLines: 3,
-                decoration: _inputDecoration(hint: 'Opsional'),
-              ),
-              const SizedBox(height: 24),
+
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -235,14 +251,7 @@ class _PengembalianPageState extends State<PengembalianPage> {
                   ),
                   onPressed: () {
                     if (_formKey.currentState!.validate()) {
-                      debugPrint('Total Denda: $totalDenda');
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Pengembalian berhasil disimpan'),
-                        ),
-                      );
-                      Navigator.pop(context);
+                      kembalikanAlat(); // 🔥 inti kabeh
                     }
                   },
                   child: const Text('Simpan Pengembalian'),
@@ -255,13 +264,11 @@ class _PengembalianPageState extends State<PengembalianPage> {
     );
   }
 
-  Widget _label(String text) => Padding(
+  Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(top: 12, bottom: 6),
-        child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
+        child: Text(t, style: const TextStyle(fontWeight: FontWeight.bold)),
       );
 
-  InputDecoration _inputDecoration({String hint = ''}) => InputDecoration(
-        hintText: hint,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-      );
+  InputDecoration _input() =>
+      const InputDecoration(border: OutlineInputBorder());
 }

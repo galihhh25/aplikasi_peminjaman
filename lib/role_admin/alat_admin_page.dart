@@ -122,12 +122,9 @@ class _AlatAdminPageState extends State<AlatAdminPage> {
                         backgroundColor: Colors.grey.shade300,
                         labelStyle: TextStyle(
                           color: aktif ? Colors.white : Colors.black,
-                          fontWeight: FontWeight.w500,
                         ),
                         onSelected: (_) {
-                          setState(() {
-                            selectedKategori = kategori;
-                          });
+                          setState(() => selectedKategori = kategori);
                         },
                       ),
                     );
@@ -137,7 +134,7 @@ class _AlatAdminPageState extends State<AlatAdminPage> {
 
               const SizedBox(height: 12),
 
-              // LIST DATA
+              // LIST
               Expanded(
                 child: loading
                     ? const Center(
@@ -151,7 +148,8 @@ class _AlatAdminPageState extends State<AlatAdminPage> {
                             ),
                           )
                         : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
                             itemCount: filtered.length,
                             itemBuilder: (context, index) {
                               return AlatCard(
@@ -165,7 +163,7 @@ class _AlatAdminPageState extends State<AlatAdminPage> {
           ),
         ),
 
-        // FAB TAMBAH
+        // FAB
         Positioned(
           right: 20,
           bottom: 20,
@@ -207,6 +205,14 @@ class AlatCard extends StatelessWidget {
     Future<void> hapusAlat() async {
       try {
         await supabase.from('alat').delete().eq('id', alat['id']);
+
+        // 🔥 LOG AKTIVITAS
+        await supabase.from('log_aktivitas').insert({
+          'user_id': supabase.auth.currentUser!.id,
+          'aktivitas': 'Admin menghapus alat: ${alat['nama_alat']}',
+          'waktu': DateTime.now().toIso8601String(),
+        });
+
         Navigator.pop(context);
         onRefresh();
       } catch (e) {
@@ -253,7 +259,7 @@ class AlatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  alat['nama_alat'] ?? '',
+                  alat['nama_alat'],
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -263,11 +269,8 @@ class AlatCard extends StatelessWidget {
                 infoRow('Kondisi', alat['kondisi'] ?? '-'),
                 infoRow('Stok', alat['stok'].toString()),
                 const SizedBox(height: 10),
-                const Text(
-                  'Spesifikasi',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
+                const Text('Spesifikasi',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 Text(alat['spesifikasi'] ?? '-'),
               ],
             ),
@@ -309,12 +312,14 @@ class AlatCard extends StatelessWidget {
                           ),
                           title: const Column(
                             children: [
-                              Icon(Icons.error, color: Colors.red, size: 48),
+                              Icon(Icons.error,
+                                  color: Colors.red, size: 48),
                               SizedBox(height: 8),
                               Text('Konfirmasi Hapus Alat'),
                             ],
                           ),
-                          content: const Text('Yakin arep ngapus data iki?'),
+                          content:
+                              const Text('Yakin arep ngapus data iki?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
@@ -350,10 +355,7 @@ class AlatCard extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(kiri)),
-          Text(
-            kanan,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
+          Text(kanan, style: const TextStyle(fontWeight: FontWeight.w500)),
         ],
       ),
     );

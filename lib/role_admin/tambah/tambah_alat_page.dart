@@ -80,6 +80,11 @@ class _TambahProdukPageState extends State<TambahProdukPage> {
         'gambar': imageUrl,
       });
 
+      await supabase.from('log_aktivitas').insert({
+  'user_id': supabase.auth.currentUser!.id,
+  'log_aktivitas': 'Admin menambahkan alat: ${namaAlat.text}',
+});
+
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
